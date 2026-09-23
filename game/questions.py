@@ -34,8 +34,12 @@ BONUS_TIMERS = [120, 300]
 DEFAULT_FINALE_SECONDS = 300
 
 KEYS = {"category", "points", "question", "answer", "all in", "seconds"}
-_KEY_RE = re.compile(r"^([A-Za-z][A-Za-z ]*):\s*(.*)$")
+# accepted alternative spellings -> canonical key
+ALIASES = {"point amount": "points", "pts": "points",
+           "daily double": "all in", "all-in": "all in"}
+_KEY_RE = re.compile(r"^([A-Za-z][A-Za-z -]*):\s*(.*)$")
 _TRUTHY = {"yes", "true", "1", "y"}
+_ALL_IN_MARK = re.compile(r"(?i)\*?\*?\s*(daily double|all[ -]?in)\s*\*?\*?")
 
 
 def parse_blocks(text):
@@ -50,10 +54,12 @@ def parse_blocks(text):
                 cur, cur_key = None, None
             continue
         m = _KEY_RE.match(line)
-        if m and m.group(1).strip().lower() in KEYS:
+        canon = m and ALIASES.get(m.group(1).strip().lower(),
+                                  m.group(1).strip().lower())
+        if m and canon in KEYS:
             if cur is None:
                 cur = {}
-            cur_key = m.group(1).strip().lower()
+            cur_key = canon
             cur[cur_key] = m.group(2).strip()
         elif cur is None:
             errors.append(f"line {lineno}: text outside any block")
@@ -75,8 +81,12 @@ def _build_board(blocks, n_cats, n_clues, timers, name):
         if missing:
             errors.append(f"{where}: missing {', '.join(missing)}")
             continue
+        raw_pts = b["points"].strip()
+        # tolerate "500 **daily double**" style markers on the points line
+        inline_all_in = bool(_ALL_IN_MARK.search(raw_pts))
+        raw_pts = _ALL_IN_MARK.sub("", raw_pts).strip()
         try:
-            pts = int(b["points"].strip())
+            pts = int(raw_pts)
         except ValueError:
             errors.append(f"{where}: points must be an integer")
             continue
@@ -91,7 +101,8 @@ def _build_board(blocks, n_cats, n_clues, timers, name):
             "value": pts,
             "question": b["question"].strip(),
             "answer": b["answer"].strip(),
-            "all_in": b.get("all in", "").strip().lower() in _TRUTHY,
+            "all_in": inline_all_in or
+                      b.get("all in", "").strip().lower() in _TRUTHY,
         })
 
     if len(order) != n_cats:

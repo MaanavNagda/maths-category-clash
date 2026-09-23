@@ -120,6 +120,28 @@ class TestBoards(unittest.TestCase):
         self.assertTrue(board["categories"][0]["clues"][3]["all_in"])
         self.assertFalse(board["categories"][0]["clues"][0]["all_in"])
 
+    def test_point_amount_alias(self):
+        text = board_text().replace("Points:", "Point amount:")
+        with tempfile.TemporaryDirectory() as tmp:
+            board, errors = questions.load_board(write(tmp, "b.md", text))
+        self.assertEqual(errors, [])
+        self.assertEqual(
+            board["categories"][0]["clues"][0]["value"], 100)
+
+    def test_inline_daily_double_marker(self):
+        blocks = []
+        for c in range(4):
+            for i in range(4):
+                pts = f"{(i + 1) * 100} **daily double**" if (c, i) == (1, 2) \
+                    else str((i + 1) * 100)
+                blocks.append(clue(f"Cat {c}", pts))
+        with tempfile.TemporaryDirectory() as tmp:
+            board, errors = questions.load_board(
+                write(tmp, "b.md", "\n".join(blocks)))
+        self.assertEqual(errors, [])
+        self.assertTrue(board["categories"][1]["clues"][2]["all_in"])
+        self.assertEqual(board["categories"][1]["clues"][2]["value"], 300)
+
     def test_valid_bonus(self):
         with tempfile.TemporaryDirectory() as tmp:
             bonus, errors = questions.load_bonus(

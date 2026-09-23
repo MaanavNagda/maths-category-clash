@@ -12,7 +12,7 @@ const RULES = [
   "<b>No penalties.</b> Incorrect guesses cost nothing. Only correct answers score.",
   "<b>Plain answers.</b> Just write the final answer clearly — no 'what is…' needed.",
   "<b>Time limits.</b> Rows: 30s · 45s · 60s · 2min (bonus board: 2min · 5min). Time up = nobody scores.",
-  "<b>All In.</b> One hidden tile: the choosing team wagers points and answers alone.",
+  "<b>All In.</b> Hidden tiles: the choosing team wagers points and answers alone.",
 ];
 
 function render(state) {
