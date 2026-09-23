@@ -4,16 +4,20 @@ const app = document.getElementById("app");
 let S = null;               // last state
 let lastTimerTotal = 0;
 
-const RULES = [
-  "<b>Teams.</b> Play in teams — solve together at your table on whiteboards.",
-  "<b>Speed flash.</b> When a question appears, every team solves at once. Raise your board as soon as you have an answer.",
-  "<b>Ranked points.</b> First correct team earns full points; each later correct team earns 10% less.",
-  "<b>Three attempts.</b> Wrong? Erase, re-work, and try again — up to 3 tries within the time limit.",
-  "<b>No penalties.</b> Incorrect guesses cost nothing. Only correct answers score.",
-  "<b>Plain answers.</b> Just write the final answer clearly — no 'what is…' needed.",
-  "<b>Time limits.</b> Rows: 30s · 45s · 60s · 2min (bonus board: 2min · 5min). Time up = nobody scores.",
-  "<b>All In.</b> Hidden tiles: the choosing team wagers points and answers alone.",
-];
+function rulesList(s) {
+  const allIn = String(s.labels.all_in || "All In")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return [
+    "<b>Teams.</b> Play in teams — solve together at your table on whiteboards.",
+    "<b>Speed flash.</b> When a question appears, every team solves at once. Raise your board as soon as you have an answer.",
+    "<b>Ranked points.</b> First correct team earns full points; each later correct team earns 10% less.",
+    "<b>Three attempts.</b> Wrong? Erase, re-work, and try again — up to 3 tries within the time limit.",
+    "<b>No penalties.</b> Incorrect guesses cost nothing. Only correct answers score.",
+    "<b>Plain answers.</b> Just write the final answer clearly — no 'what is…' needed.",
+    "<b>Time limits.</b> Rows: 30s · 45s · 60s · 2min (bonus board: 2min · 5min). Time up = nobody scores.",
+    `<b>${allIn}.</b> Hidden tiles: the choosing team wagers points and answers alone.`,
+  ];
+}
 
 function render(state) {
   S = state;
@@ -54,7 +58,7 @@ function viewRules(s) {
   const box = el("div", "rules-box");
   box.appendChild(el("h2", "rules-title", "How it works"));
   const ol = el("ol", "rules-list");
-  RULES.forEach((r) => {
+  rulesList(s).forEach((r) => {
     const li = document.createElement("li");
     const span = document.createElement("span");
     span.innerHTML = r;
