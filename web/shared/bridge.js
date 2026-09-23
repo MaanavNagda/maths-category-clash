@@ -12,6 +12,7 @@ function initBridge(signalName, onState, onTick) {
       onState(JSON.parse(json));
     });
     controller.tick.connect(function (s) { onTick(s); });
+    controller.requestState();   // pull the initial snapshot
   });
 }
 

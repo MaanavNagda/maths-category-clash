@@ -43,6 +43,25 @@ class Controller(QObject):
                 self.state.set_teams(self.config["teams"])
             except GameError:
                 pass
+        # Auto-load last session's questions file, if it still exists.
+        qpath = self.config.get("questions")
+        if qpath and os.path.isfile(qpath):
+            data, errors = questions.load(qpath)
+            if errors:
+                self.state.message = (
+                    f"Saved questions file failed validation:\n" +
+                    "\n".join(f"• {e}" for e in errors[:12]))
+            else:
+                try:
+                    self.state.load_data(data)
+                    self.state.message = (
+                        f"Loaded {os.path.basename(qpath)}")
+                except GameError as exc:
+                    self.state.message = str(exc)
+        elif qpath:
+            self.state.message = (
+                "Previously loaded questions file not found — "
+                "please load it again.")
 
     # ------------------------------------------------------------ internals
 
@@ -63,6 +82,9 @@ class Controller(QObject):
             snap["config_teams"] = self.config["teams"]
             snap["logo_name"] = (os.path.basename(self.config["logo"])
                                  if self.config.get("logo") else None)
+            snap["questions_name"] = (
+                os.path.basename(self.config["questions"])
+                if self.config.get("questions") else None)
         return snap
 
     def _push(self):
@@ -120,6 +142,8 @@ class Controller(QObject):
             self._push()
             return
         self._run(self.state.load_data, data)
+        self.config["questions"] = path
+        cfg_mod.save(self.config)
         self.state.message = f"Loaded {os.path.basename(path)}"
         self._push()
 
@@ -143,6 +167,11 @@ class Controller(QObject):
         self._push()
 
     # -------------------------------------------------------- slots: setup
+
+    @Slot()
+    def requestState(self):
+        """Views call this once the channel is up to get the first snapshot."""
+        self._push()
 
     @Slot(str)
     def setTeams(self, names_json):

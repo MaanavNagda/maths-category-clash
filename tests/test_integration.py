@@ -7,7 +7,9 @@ Run: .venv/bin/python -m unittest tests.test_integration -v
 import json
 import os
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS",
@@ -17,6 +19,7 @@ import PySide6.QtWebEngineWidgets  # noqa: F401,E402  (before QApplication)
 from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from game import config as cfg_mod  # noqa: E402
 from game.controller import Controller  # noqa: E402
 from main import ROOT, WebWindow  # noqa: E402
 
@@ -80,6 +83,17 @@ class TestApp(unittest.TestCase):
                 p, "typeof controller !== 'undefined' && controller !== null"),
                 15000)
             assert ok, "webchannel bridge connected"
+
+        # requestState() must have pushed the initial snapshot: the display
+        # renders the logo screen without any user action.
+        ok = wait_for(lambda: js(cls.display.view.page(),
+                                 "!!document.querySelector('.logo-img')"),
+                      8000)
+        assert ok, "initial render on display"
+        ok = wait_for(lambda: js(cls.host.view.page(),
+                                 "document.querySelectorAll('.team-name')"
+                                 ".length") > 0, 8000)
+        assert ok, "initial render on host"
 
         cls.last = {"display": None, "host": None}
         cls.ctl.displayChanged.connect(
@@ -199,6 +213,34 @@ class TestApp(unittest.TestCase):
         ok = wait_for(lambda: js(page, "window.__fb") is not None, 8000)
         self.assertTrue(ok and js(page, "window.__fb"),
                         "external fetch blocked")
+
+    def test_questions_persist(self):
+        """A questions file saved in config auto-loads on next startup."""
+        with tempfile.TemporaryDirectory() as tmp:
+            qfile = os.path.join(tmp, "q.json")
+            with open(qfile, "w", encoding="utf-8") as fh:
+                json.dump(sample_data(), fh)
+            cfgfile = os.path.join(tmp, "config.json")
+            with open(cfgfile, "w", encoding="utf-8") as fh:
+                json.dump({"questions": qfile,
+                           "teams": ["A", "B"]}, fh)
+            with mock.patch.object(cfg_mod, "CONFIG_PATH", cfgfile):
+                ctl = Controller()
+        self.assertIsNotNone(ctl.state.data, "questions auto-loaded")
+        self.assertEqual(len(ctl.state.teams), 2)
+        snap = ctl._snapshot("host")
+        self.assertEqual(snap["questions_name"], "q.json")
+
+    def test_missing_questions_file_warns(self):
+        """A vanished questions file produces a message, not a crash."""
+        with tempfile.TemporaryDirectory() as tmp:
+            cfgfile = os.path.join(tmp, "config.json")
+            with open(cfgfile, "w", encoding="utf-8") as fh:
+                json.dump({"questions": os.path.join(tmp, "gone.json")}, fh)
+            with mock.patch.object(cfg_mod, "CONFIG_PATH", cfgfile):
+                ctl = Controller()
+        self.assertIsNone(ctl.state.data)
+        self.assertIn("not found", ctl.state.message)
 
 
 if __name__ == "__main__":

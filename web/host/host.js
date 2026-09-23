@@ -110,7 +110,9 @@ function viewSetup(s) {
   loadBtn.onclick = () => controller.openQuestions();
   qRow.appendChild(loadBtn);
   qRow.appendChild(el("span", "label",
-    s.questions_loaded ? "✓ questions loaded" : "no file loaded"));
+    s.questions_loaded
+      ? "✓ " + (s.questions_name || "questions loaded")
+      : "no file loaded"));
   p.appendChild(qRow);
 
   // logo
