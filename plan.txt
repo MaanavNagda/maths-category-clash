@@ -1,0 +1,88 @@
+MATHS CATEGORY CLASH — PROJECT PLAN
+===================================
+A Jeopardy-style quiz game for a MathsSoc club session. Native Linux desktop app,
+100% local/offline at runtime, trademark-neutral branding (user-renameable).
+
+STACK
+-----
+- Python 3 + PySide6 (Qt WebEngine) — two native windows sharing one in-process
+  game controller via Qt WebChannel.
+- UI written in HTML/CSS/JS inside each window; KaTeX vendored locally for LaTeX.
+- No CDN, no external requests (request interceptor blocks non-local URLs).
+- unittest (stdlib) for tests — no extra test deps.
+
+BRANDING (defaults, all renameable in host settings, persisted to config.json)
+----------------------------------------------------------------------------
+- Game title:        "Maths Category Clash"
+- Daily Double:      "All In"        (authentic wager, not double-points)
+- Final Jeopardy:    "Grand Finale"  (wagers + 300s timer)
+- Round 2 board:     "Bonus Board"   (hidden, Ctrl+Shift+R)
+- Tile values:       points (100/200/300/400), not dollars
+- Visual identity:   distinct minimalist dark theme — NOT the Jeopardy! blue grid.
+
+GAME RULES (custom, differ from TV Jeopardy)
+--------------------------------------------
+- 5 teams (host-configurable 2–8) of students, whiteboard "speed flash":
+  all teams solve simultaneously; ranked by finishing order.
+- Up to 3 attempts per team within the time limit (host-judged, not enforced in app).
+- No point penalties for wrong answers (except All In / Grand Finale wagers).
+- Plain answers — no "what is...?" format.
+- Timers by tile value: 100→30s, 200→60s, 300→90s, 400→120s. Autostart, no pause.
+  Host may end a question early. Timeout = tile dead, 0 points.
+- Scoring: 1st correct team = 100% of value, each next = −10% (100/90/80/70/60…),
+  rounded to int. Teams that don't solve = 0.
+- All In tile: host picks answering team + wager (cap = max(team score, 400)).
+  Correct = +wager, wrong = −wager. Uses tile's normal timer.
+- Grand Finale: category shown → host enters each team's wager privately
+  (cap = max(0, score)) → clue + 300s timer → host marks each team right/wrong
+  → final standings.
+- Dual-host workflow: Host A runs screen/timer, Host B judges whiteboards.
+
+TWO WINDOWS
+-----------
+DISPLAY (projector): logo → rules → 4×4 board (+scoreboard bar) → question +
+big countdown → answer → scores → finale → standings. Tiles clickable.
+HOST (laptop): setup (team count/names, load questions JSON, upload logo,
+rename labels) → per-question: answer shown privately, team tiles clicked in
+finishing order (click again to undo), End Question / Abort buttons →
+wager entry for All In & Grand Finale → shortcut hint printed in footer.
+
+CONTENT
+-------
+- questions uploaded at runtime by host (file picker). App ships with
+  questions.example.json only — no bundled questions (keeps answers private).
+- JSON format: rounds[] → categories[] → clues[]{value,question,answer,all_in};
+  optional second round; finale{category,question,answer,seconds}.
+- Logo uploaded by host, copied to userdata/ (gitignored). Default: placeholder icon.
+- config.json (gitignored) persists labels + logo path.
+
+FILE LAYOUT
+-----------
+plan.txt, README.md, requirements.txt, .gitignore, questions.example.json
+main.py                  — entry point, two windows, interceptor, shortcut
+game/__init__.py
+game/logic.py            — pure logic: scoring curve, wager caps, state machine
+game/questions.py        — JSON load + validation
+game/config.py           — config.json persistence
+game/controller.py       — QObject bridge: slots for actions, signals to views
+web/shared/shared.css    — design tokens (dark, minimalist, gold accent)
+web/shared/bridge.js     — qwebchannel setup + KaTeX render helper
+web/shared/katex/        — vendored KaTeX dist (js/css/fonts)
+web/display/index.html + display.css + display.js
+web/host/index.html + host.css + host.js
+assets/logo-placeholder.svg
+userdata/                — uploaded logo (gitignored)
+tests/test_logic.py, test_questions.py, test_integration.py
+
+TESTING
+-------
+- Unit: scoring curve, wager caps, JSON validation (valid/invalid files),
+  state transitions.
+- Integration: launch offscreen (QT_QPA_PLATFORM=offscreen), drive controller
+  through full game: setup → board → question → ranked scoring → All In →
+  bonus board → Grand Finale → standings.
+- Manual checklist in README for the user to verify on their machine.
+
+GIT
+---
+- git init + local commit. GitHub repo created/pushed ONLY when user approves.

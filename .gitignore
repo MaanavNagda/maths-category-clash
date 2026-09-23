@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+config.json
+userdata/
+questions.local.json
+*.local.json
+.DS_Store
