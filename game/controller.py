@@ -15,8 +15,7 @@ from PySide6.QtWidgets import QFileDialog
 
 from game import config as cfg_mod
 from game import questions
-from game.logic import (DEFAULT_FINALE_SECONDS, GameError, GameState,
-                        timer_seconds)
+from game.logic import DEFAULT_FINALE_SECONDS, GameError, GameState
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 USERDATA_DIR = os.path.join(PROJECT_ROOT, "userdata")
@@ -43,25 +42,35 @@ class Controller(QObject):
                 self.state.set_teams(self.config["teams"])
             except GameError:
                 pass
-        # Auto-load last session's questions file, if it still exists.
-        qpath = self.config.get("questions")
-        if qpath and os.path.isfile(qpath):
-            data, errors = questions.load(qpath)
+        # Auto-load last session's files, if they still exist.
+        loaded, missing = [], []
+        for key, loader, setter in (
+                ("board", questions.load_board, self.state.load_board),
+                ("bonus", questions.load_bonus, self.state.load_bonus),
+                ("finale", questions.load_finale, self.state.load_finale)):
+            path = self.config.get(key)
+            if not path:
+                continue
+            if not os.path.isfile(path):
+                missing.append(os.path.basename(path))
+                continue
+            data, errors = loader(path)
             if errors:
-                self.state.message = (
-                    f"Saved questions file failed validation:\n" +
-                    "\n".join(f"• {e}" for e in errors[:12]))
-            else:
-                try:
-                    self.state.load_data(data)
-                    self.state.message = (
-                        f"Loaded {os.path.basename(qpath)}")
-                except GameError as exc:
-                    self.state.message = str(exc)
-        elif qpath:
-            self.state.message = (
-                "Previously loaded questions file not found — "
-                "please load it again.")
+                self.state.message += (
+                    f"{os.path.basename(path)} failed validation: "
+                    + "; ".join(errors[:6]) + "\n")
+                continue
+            try:
+                setter(data)
+                loaded.append(os.path.basename(path))
+            except GameError as exc:
+                self.state.message += str(exc) + "\n"
+        if loaded:
+            self.state.message += "Loaded " + ", ".join(loaded)
+        if missing:
+            self.state.message += (
+                "\nNot found: " + ", ".join(missing) + " — load again.")
+        self.state.message = self.state.message.strip()
 
     # ------------------------------------------------------------ internals
 
@@ -82,9 +91,13 @@ class Controller(QObject):
             snap["config_teams"] = self.config["teams"]
             snap["logo_name"] = (os.path.basename(self.config["logo"])
                                  if self.config.get("logo") else None)
-            snap["questions_name"] = (
-                os.path.basename(self.config["questions"])
-                if self.config.get("questions") else None)
+            for key in ("board", "bonus", "finale"):
+                snap[key + "_name"] = (
+                    os.path.basename(self.config[key])
+                    if self.config.get(key) else None)
+        if self.state._rounds():
+            snap["round_name"] = snap["labels"][
+                "round1" if self.state.round_index == 0 else "round2"]
         return snap
 
     def _push(self):
@@ -128,24 +141,39 @@ class Controller(QObject):
 
     # ------------------------------------------------------------- file I/O
 
-    @Slot()
-    def openQuestions(self):
+    def _load_file(self, title, loader, setter, config_key):
+        """Shared upload flow: pick file -> parse -> load -> persist path."""
         path, _ = QFileDialog.getOpenFileName(
-            self.host_window, "Load questions JSON", PROJECT_ROOT,
-            "JSON files (*.json)")
+            self.host_window, title, PROJECT_ROOT,
+            "Markdown files (*.md *.markdown *.txt)")
         if not path:
             return
-        data, errors = questions.load(path)
+        data, errors = loader(path)
         if errors:
-            self.state.message = "Questions file rejected:\n" + "\n".join(
-                f"• {e}" for e in errors[:12])
+            self.state.message = f"{os.path.basename(path)} rejected:\n" + \
+                "\n".join(f"• {e}" for e in errors[:12])
             self._push()
             return
-        self._run(self.state.load_data, data)
-        self.config["questions"] = path
+        self._run(setter, data)
+        self.config[config_key] = path
         cfg_mod.save(self.config)
         self.state.message = f"Loaded {os.path.basename(path)}"
         self._push()
+
+    @Slot()
+    def openBoard(self):
+        self._load_file("Load regular board", questions.load_board,
+                        self.state.load_board, "board")
+
+    @Slot()
+    def openBonus(self):
+        self._load_file("Load bonus board", questions.load_bonus,
+                        self.state.load_bonus, "bonus")
+
+    @Slot()
+    def openFinale(self):
+        self._load_file("Load Grand Finale clue", questions.load_finale,
+                        self.state.load_finale, "finale")
 
     @Slot()
     def openLogo(self):
@@ -203,7 +231,7 @@ class Controller(QObject):
         self.state.used = set()
         self.state.round_index = 0
         self.state._clear_active()
-        self.state.phase = "board" if self.state.data else "setup"
+        self.state.phase = "board" if self.state._rounds() else "setup"
         self._stop_timer()
         self._push()
 
@@ -217,13 +245,13 @@ class Controller(QObject):
     def selectTile(self, cat, idx):
         self._run(self.state.select_tile, cat, idx)
         if self.state.phase == "question" and self.state.active:
-            self._start_timer(timer_seconds(self.state.active["value"]))
+            self._start_timer(self.state.active["timer"])
 
     @Slot(int, int)
     def setWager(self, team_id, amount):
         self._run(self.state.set_wager, team_id, amount)
         if self.state.phase == "question" and self.state.active:
-            self._start_timer(timer_seconds(self.state.active["value"]))
+            self._start_timer(self.state.active["timer"])
 
     @Slot()
     def revealAnswer(self):
@@ -269,8 +297,8 @@ class Controller(QObject):
         self._run(self.state.start_finale_question)
         if self.state.phase == "finale_question":
             secs = DEFAULT_FINALE_SECONDS
-            if self.state.data and "finale" in self.state.data:
-                secs = self.state.data["finale"].get("seconds", secs)
+            if self.state.finale:
+                secs = self.state.finale.get("seconds", secs)
             self._start_timer(secs)
 
     @Slot()

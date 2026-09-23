@@ -17,48 +17,48 @@ Drag the **Display** window to the projector (F11 = fullscreen). Keep the
 
 ## Session flow
 
-1. **Setup (host)** — set team count/names, load a questions JSON, upload a
-   logo (optional), rename any labels (optional). Press **Start game**.
+1. **Setup (host)** — set team count/names, load the three markdown files
+   (board / bonus / finale), upload a logo (optional), rename any labels
+   (optional). Press **Start game**.
 2. **Logo → Rules** — shown on the display; press **Next**.
-3. **Board** — 4 categories × 4 tiles (100–400 pts). Click a tile on either
-   window.
+3. **Board** — 4 categories × 4 tiles. Click a tile on either window.
 4. **Question** — countdown auto-starts (30/60/90/120s by value). Click the
    display again (with confirmation) to reveal the answer.
 5. **Scoring (host)** — tap teams in finishing order (tap again to undo);
    1st = 100% of points, each later team −10%. **End question & score**.
 6. **All In tile** — the choosing team wagers (up to their score, min. tile
    max 400) and answers alone: +wager if right, −wager if wrong.
-7. **Bonus Board** — `Ctrl+Shift+R` switches to the hidden second round
-   (if the JSON has one).
+7. **Bonus Board** — `Ctrl+Shift+R` switches to the hidden 2×2 second board
+   (if a bonus file was loaded).
 8. **Grand Finale** — host enters each team's wager privately → question +
    5:00 timer → mark each team right/wrong → final standings.
 
-## Questions JSON format
+## Question files — markdown format
 
-See `questions.example.json`. Structure:
+Three separate uploads in the host view (each persists across restarts):
 
-```jsonc
-{
-  "rounds": [
-    { "name": "Round 1",
-      "categories": [
-        { "name": "Algebra",
-          "clues": [
-            { "value": 100, "question": "Solve $x^2=9$.", "answer": "$x=\\pm 3$",
-              "all_in": false }   // all_in optional; exactly 4 clues per
-          ] }                     // category, values 100/200/300/400
-      ] },                        // exactly 4 categories per round
-    { "name": "Bonus Board", "categories": [ … ] }   // optional round 2
-  ],
-  "finale": { "category": "…", "question": "…", "answer": "…",
-              "seconds": 300 }                        // optional
-}
+- **Regular board** — `board.example.md`: 4 categories × 4 clues.
+- **Bonus board** — `bonus.example.md`: 2 categories × 2 clues.
+- **Grand Finale** — `finale.example.md`: one block, no `Points:`.
+
+Format — one clue per block, blocks separated by a blank line:
+
+```
+Category: Algebra
+Points: 100
+Question: Solve $x^2 = 9$.
+Answer: $x = \pm 3$
+All In: yes          <- optional; marks the tile as an All In wager
 ```
 
-- LaTeX: `$…$` inline, `$$…$$` display, `\(…\)`, `\[…\]` (KaTeX, vendored —
-  works offline).
-- Keep your real questions **out of the public repo** — copy the example to
-  `questions.local.json` (gitignored) and load that.
+- Keys (case-insensitive): `Category`, `Points`, `Question`, `Answer`,
+  `All In`, `Seconds` (finale only, default 300).
+- Clues are grouped by `Category` (first-seen order = column order) and
+  sorted by `Points` (row order). Any positive point values work.
+- Timers are per row: regular board 30s / 45s / 60s / 2min, bonus 2min / 5min.
+- LaTeX: `$…$` inline, `$$…$$` display (KaTeX, vendored — works offline).
+- Keep real questions **out of the repo** — name files `*.local.md`
+  (gitignored) and load those.
 
 ## Tests
 
@@ -88,7 +88,8 @@ complete game through the controller.
 ```bash
 .venv/bin/pip install pyinstaller
 .venv/bin/pyinstaller --noconfirm --add-data "web:web" \
-  --add-data "questions.example.json:." -n maths-category-clash main.py
+  --add-data "board.example.md:." --add-data "bonus.example.md:." \
+  --add-data "finale.example.md:." -n maths-category-clash main.py
 ```
 
 ## Legal

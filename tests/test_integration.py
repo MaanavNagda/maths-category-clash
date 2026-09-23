@@ -20,6 +20,7 @@ from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from game import config as cfg_mod  # noqa: E402
+from game import questions  # noqa: E402
 from game.controller import Controller  # noqa: E402
 from main import ROOT, WebWindow  # noqa: E402
 
@@ -43,18 +44,38 @@ def js(page, expr, timeout_ms=8000):
     return box.get("v")
 
 
-def sample_data():
-    def clues():
-        return [{"value": v, "question": f"Q{v} $x^2$", "answer": f"A{v}"}
-                for v in (100, 200, 300, 400)]
-    r1 = {"name": "Round 1", "categories": [
-        {"name": f"C{c}", "clues": clues()} for c in range(4)]}
-    r2 = {"name": "Bonus", "categories": [
-        {"name": f"B{c}", "clues": clues()} for c in range(4)]}
-    r2["categories"][0]["clues"][0]["all_in"] = True
-    return {"rounds": [r1, r2],
-            "finale": {"category": "F", "question": "FQ", "answer": "FA",
-                       "seconds": 300}}
+TMP = tempfile.mkdtemp(prefix="mcc-test-")
+
+
+def _md(name, text):
+    path = os.path.join(TMP, name)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    return path
+
+
+def _clue(cat, pts, extra=""):
+    return (f"Category: {cat}\nPoints: {pts}\n"
+            f"Question: Q{pts} $x^2$\nAnswer: A{pts}\n"
+            + (extra + "\n" if extra else ""))
+
+
+BOARD_MD = "\n".join(
+    _clue(f"C{c}", v) for c in range(4) for v in (100, 200, 300, 400))
+BONUS_MD = (_clue("B0", 200, "All In: yes") + "\n" + _clue("B0", 400)
+            + "\n" + _clue("B1", 200) + "\n" + _clue("B1", 400))
+FINALE_MD = "Category: F\nQuestion: FQ\nAnswer: FA\nSeconds: 300\n"
+
+
+def load_all(ctl):
+    """Parse the markdown fixtures and attach them to the controller."""
+    board, e1 = questions.load_board(_md("board.md", BOARD_MD))
+    bonus, e2 = questions.load_bonus(_md("bonus.md", BONUS_MD))
+    fin, e3 = questions.load_finale(_md("finale.md", FINALE_MD))
+    assert not (e1 or e2 or e3), (e1, e2, e3)
+    ctl._run(ctl.state.load_board, board)
+    ctl._run(ctl.state.load_bonus, bonus)
+    ctl._run(ctl.state.load_finale, fin)
 
 
 class TestApp(unittest.TestCase):
@@ -123,7 +144,7 @@ class TestApp(unittest.TestCase):
 
         # --- setup ---
         ctl.setTeams(json.dumps(["Alpha", "Beta", "Gamma"]))
-        ctl._run(ctl.state.load_data, sample_data())
+        load_all(ctl)
         ctl.setLabel("title", "Test Clash")
         ctl.startGame()
         self.assertEqual(self.dstate()["phase"], "rules")
@@ -147,6 +168,7 @@ class TestApp(unittest.TestCase):
         ctl.selectTile(0, 0)
         d = self.dstate()
         self.assertEqual(d["phase"], "question")
+        self.assertEqual(d["active"]["timer"], 30)       # row 1 = 30s
         self.assertNotIn("answer", d["active"])          # hidden from display
         self.assertEqual(self.hstate()["active"]["answer"], "A100")
         self.assertTrue(ctl._deadline is not None)       # timer running
@@ -165,13 +187,17 @@ class TestApp(unittest.TestCase):
 
         # --- bonus board via shortcut path ---
         ctl.activateBonus()
-        self.assertEqual(self.dstate()["round_index"], 1)
+        d = self.dstate()
+        self.assertEqual(d["round_index"], 1)
+        self.assertEqual(len(d["board"]["categories"]), 2)   # 2x2 bonus
 
         # --- All In ---
         ctl.selectTile(0, 0)
         self.assertEqual(self.dstate()["phase"], "wager")
         ctl.setWager(0, 200)
-        self.assertEqual(self.dstate()["phase"], "question")
+        d = self.dstate()
+        self.assertEqual(d["phase"], "question")
+        self.assertEqual(d["active"]["timer"], 120)      # bonus row 1 = 2min
         self.assertNotIn("wager", self.dstate()["active"])  # hidden til reveal
         ctl.setAllInResult(True)
         ctl.revealAnswer()
@@ -215,32 +241,34 @@ class TestApp(unittest.TestCase):
                         "external fetch blocked")
 
     def test_questions_persist(self):
-        """A questions file saved in config auto-loads on next startup."""
+        """Board/bonus/finale paths in config auto-load on next startup."""
         with tempfile.TemporaryDirectory() as tmp:
-            qfile = os.path.join(tmp, "q.json")
-            with open(qfile, "w", encoding="utf-8") as fh:
-                json.dump(sample_data(), fh)
+            bpath = _md("b.md", BOARD_MD)
             cfgfile = os.path.join(tmp, "config.json")
             with open(cfgfile, "w", encoding="utf-8") as fh:
-                json.dump({"questions": qfile,
+                json.dump({"board": bpath,
+                           "bonus": _md("x.md", BONUS_MD),
+                           "finale": _md("f.md", FINALE_MD),
                            "teams": ["A", "B"]}, fh)
             with mock.patch.object(cfg_mod, "CONFIG_PATH", cfgfile):
                 ctl = Controller()
-        self.assertIsNotNone(ctl.state.data, "questions auto-loaded")
+        self.assertIsNotNone(ctl.state.board, "board auto-loaded")
+        self.assertIsNotNone(ctl.state.bonus, "bonus auto-loaded")
+        self.assertIsNotNone(ctl.state.finale, "finale auto-loaded")
         self.assertEqual(len(ctl.state.teams), 2)
         snap = ctl._snapshot("host")
-        self.assertEqual(snap["questions_name"], "q.json")
+        self.assertEqual(snap["board_name"], "b.md")
 
     def test_missing_questions_file_warns(self):
-        """A vanished questions file produces a message, not a crash."""
+        """A vanished board file produces a message, not a crash."""
         with tempfile.TemporaryDirectory() as tmp:
             cfgfile = os.path.join(tmp, "config.json")
             with open(cfgfile, "w", encoding="utf-8") as fh:
-                json.dump({"questions": os.path.join(tmp, "gone.json")}, fh)
+                json.dump({"board": os.path.join(tmp, "gone.md")}, fh)
             with mock.patch.object(cfg_mod, "CONFIG_PATH", cfgfile):
                 ctl = Controller()
-        self.assertIsNone(ctl.state.data)
-        self.assertIn("not found", ctl.state.message)
+        self.assertIsNone(ctl.state.board)
+        self.assertIn("Not found", ctl.state.message)
 
 
 if __name__ == "__main__":

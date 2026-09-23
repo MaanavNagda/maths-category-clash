@@ -15,7 +15,8 @@ import PySide6.QtWebEngineWidgets  # noqa: F401  (must precede QApplication)
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWebChannel import QWebChannel
-from PySide6.QtWebEngineCore import (QWebEngineUrlRequestInterceptor,
+from PySide6.QtWebEngineCore import (QWebEngineProfile,
+                                     QWebEngineUrlRequestInterceptor,
                                      QWebEngineUrlRequestInfo)
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QMainWindow

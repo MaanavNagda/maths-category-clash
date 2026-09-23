@@ -27,12 +27,13 @@ GAME RULES (custom, differ from TV Jeopardy)
 - Up to 3 attempts per team within the time limit (host-judged, not enforced in app).
 - No point penalties for wrong answers (except All In / Grand Finale wagers).
 - Plain answers — no "what is...?" format.
-- Timers by tile value: 100→30s, 200→60s, 300→90s, 400→120s. Autostart, no pause.
-  Host may end a question early. Timeout = tile dead, 0 points.
+- Timers by board row: regular board 30s/45s/60s/2min, bonus board 2min/5min.
+  Autostart, no pause. Host may end a question early. Timeout = tile dead, 0 pts.
 - Scoring: 1st correct team = 100% of value, each next = −10% (100/90/80/70/60…),
   rounded to int. Teams that don't solve = 0.
-- All In tile: host picks answering team + wager (cap = max(team score, 400)).
-  Correct = +wager, wrong = −wager. Uses tile's normal timer.
+- All In tile: host picks answering team + wager (cap = max(team score,
+  highest tile value on that board)). Correct = +wager, wrong = −wager.
+  Uses tile's normal row timer.
 - Grand Finale: category shown → host enters each team's wager privately
   (cap = max(0, score)) → clue + 300s timer → host marks each team right/wrong
   → final standings.
@@ -42,27 +43,33 @@ TWO WINDOWS
 -----------
 DISPLAY (projector): logo → rules → 4×4 board (+scoreboard bar) → question +
 big countdown → answer → scores → finale → standings. Tiles clickable.
-HOST (laptop): setup (team count/names, load questions JSON, upload logo,
-rename labels) → per-question: answer shown privately, team tiles clicked in
-finishing order (click again to undo), End Question / Abort buttons →
-wager entry for All In & Grand Finale → shortcut hint printed in footer.
+HOST (laptop): setup (team count/names, three markdown uploads — board /
+bonus / finale — upload logo, rename labels) → per-question: answer shown
+privately, team tiles clicked in finishing order (click again to undo),
+End Question / Abort buttons → wager entry for All In & Grand Finale →
+shortcut hint printed in footer.
 
 CONTENT
 -------
-- questions uploaded at runtime by host (file picker). App ships with
-  questions.example.json only — no bundled questions (keeps answers private).
-- JSON format: rounds[] → categories[] → clues[]{value,question,answer,all_in};
-  optional second round; finale{category,question,answer,seconds}.
-- Logo uploaded by host, copied to userdata/ (gitignored). Default: placeholder icon.
-- config.json (gitignored) persists labels + logo path.
+- Questions uploaded at runtime by host (file picker) as THREE separate
+  markdown files: regular board (4×4), bonus board (2×2), Grand Finale clue.
+  App ships with board/bonus/finale .example.md only — no bundled questions.
+- Markdown format: blank-line-separated blocks of Category:/Points:/
+  Question:/Answer: (+ optional "All In: yes"; finale adds "Seconds:").
+  Clues grouped by Category (column order = first seen), sorted by Points
+  (row order). Any positive point values allowed.
+- Logo uploaded by host, copied to userdata/ (gitignored). Default: placeholder.
+- config.json (gitignored) persists labels + logo path + all three file paths
+  + team names — everything reloads automatically next launch.
 
 FILE LAYOUT
 -----------
-plan.txt, README.md, requirements.txt, .gitignore, questions.example.json
+plan.txt, README.md, requirements.txt, .gitignore,
+board.example.md, bonus.example.md, finale.example.md
 main.py                  — entry point, two windows, interceptor, shortcut
 game/__init__.py
 game/logic.py            — pure logic: scoring curve, wager caps, state machine
-game/questions.py        — JSON load + validation
+game/questions.py        — markdown parse + validation (board/bonus/finale)
 game/config.py           — config.json persistence
 game/controller.py       — QObject bridge: slots for actions, signals to views
 web/shared/shared.css    — design tokens (dark, minimalist, gold accent)
@@ -76,8 +83,8 @@ tests/test_logic.py, test_questions.py, test_integration.py
 
 TESTING
 -------
-- Unit: scoring curve, wager caps, JSON validation (valid/invalid files),
-  state transitions.
+- Unit: scoring curve, wager caps, markdown parsing/validation
+  (valid/invalid files), state transitions, per-row timers.
 - Integration: launch offscreen (QT_QPA_PLATFORM=offscreen), drive controller
   through full game: setup → board → question → ranked scoring → All In →
   bonus board → Grand Finale → standings.
@@ -85,4 +92,5 @@ TESTING
 
 GIT
 ---
-- git init + local commit. GitHub repo created/pushed ONLY when user approves.
+- git init + local commit. Pushed to github.com/MaanavNagda/maths-category-clash
+  (public) after user approval.

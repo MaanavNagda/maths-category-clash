@@ -1,31 +1,43 @@
 import unittest
 
 from game.logic import (GameError, GameState, all_in_wager_cap,
-                        finale_wager_cap, rank_percent, rank_points,
-                        timer_seconds)
+                        finale_wager_cap, rank_percent, rank_points)
 
 
-def sample_data(with_bonus=True, with_finale=True):
-    def clues():
-        return [{"value": v, "question": f"Q{v}", "answer": f"A{v}"}
-                for v in (100, 200, 300, 400)]
-    rounds = [{"name": "Round 1", "categories": [
-        {"name": f"Cat {c}", "clues": clues()} for c in range(4)]}]
-    if with_bonus:
-        bonus = {"name": "Bonus", "categories": [
-            {"name": f"B{c}", "clues": clues()} for c in range(4)]}
-        bonus["categories"][0]["clues"][0]["all_in"] = True
-        rounds.append(bonus)
-    data = {"rounds": rounds}
-    if with_finale:
-        data["finale"] = {"category": "Finals", "question": "FQ",
-                          "answer": "FA", "seconds": 300}
-    return data
+def board():
+    """Regular board: 4 categories x 4 clues, timers 30/45/60/120."""
+    return {"name": "board", "timers": [30, 45, 60, 120],
+            "categories": [
+                {"name": f"Cat {c}", "clues": [
+                    {"value": v, "question": f"Q{v}", "answer": f"A{v}",
+                     "all_in": False}
+                    for v in (100, 200, 300, 400)]}
+                for c in range(4)]}
+
+
+def bonus():
+    """Bonus board: 2 categories x 2 clues, timers 120/300."""
+    b = {"name": "bonus", "timers": [120, 300],
+         "categories": [
+             {"name": f"B{c}", "clues": [
+                 {"value": v, "question": f"BQ{v}", "answer": f"BA{v}",
+                  "all_in": False}
+                 for v in (200, 400)]}
+             for c in range(2)]}
+    b["categories"][0]["clues"][0]["all_in"] = True
+    return b
+
+
+def finale():
+    return {"category": "Finals", "question": "FQ",
+            "answer": "FA", "seconds": 300}
 
 
 def ready_state():
     gs = GameState()
-    gs.load_data(sample_data())
+    gs.load_board(board())
+    gs.load_bonus(bonus())
+    gs.load_finale(finale())
     gs.set_teams(["A", "B", "C", "D", "E"])
     gs.start_game()   # -> rules
     gs.advance()      # -> board
@@ -45,16 +57,10 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(rank_points(400, 1), 360)
         self.assertEqual(rank_points(300, 2), 240)
 
-    def test_timer_seconds(self):
-        self.assertEqual(timer_seconds(100), 30)
-        self.assertEqual(timer_seconds(200), 60)
-        self.assertEqual(timer_seconds(300), 90)
-        self.assertEqual(timer_seconds(400), 120)
-
     def test_all_in_cap(self):
-        self.assertEqual(all_in_wager_cap(0), 400)
-        self.assertEqual(all_in_wager_cap(250), 400)
-        self.assertEqual(all_in_wager_cap(900), 900)
+        self.assertEqual(all_in_wager_cap(0, 400), 400)
+        self.assertEqual(all_in_wager_cap(250, 400), 400)
+        self.assertEqual(all_in_wager_cap(900, 400), 900)
 
     def test_finale_cap(self):
         self.assertEqual(finale_wager_cap(-50), 0)
@@ -66,8 +72,8 @@ class TestFlow(unittest.TestCase):
     def test_setup_guards(self):
         gs = GameState()
         with self.assertRaises(GameError):
-            gs.start_game()                    # no data
-        gs.load_data(sample_data())
+            gs.start_game()                    # no board
+        gs.load_board(board())
         with self.assertRaises(GameError):
             gs.start_game()                    # no teams
         with self.assertRaises(GameError):
@@ -77,6 +83,22 @@ class TestFlow(unittest.TestCase):
         self.assertEqual(gs.phase, "rules")
         gs.advance()
         self.assertEqual(gs.phase, "board")
+
+    def test_row_timers(self):
+        """Timer comes from the row index, not the point value."""
+        gs = ready_state()
+        for row, secs in enumerate((30, 45, 60, 120)):
+            gs.select_tile(0, row)
+            self.assertEqual(gs.active["timer"], secs)
+            gs.abort_question()
+        gs.activate_bonus()
+        for row, secs in enumerate((120, 300)):
+            gs.select_tile(0, row)
+            if gs.phase == "wager":            # All In tile at (0,0)
+                gs.abort_question()
+                continue
+            self.assertEqual(gs.active["timer"], secs)
+            gs.abort_question()
 
     def test_question_scoring_order(self):
         gs = ready_state()
@@ -111,11 +133,11 @@ class TestFlow(unittest.TestCase):
 
     def test_all_in_flow(self):
         gs = ready_state()
-        gs.activate_bonus()                    # round 2 has the All In tile
+        gs.activate_bonus()                    # bonus board has the All In
         gs.select_tile(0, 0)
         self.assertEqual(gs.phase, "wager")
         with self.assertRaises(GameError):
-            gs.set_wager(0, 401)               # cap = 400 at score 0
+            gs.set_wager(0, 401)               # cap = tile max 400 at score 0
         gs.set_wager(0, 250)
         self.assertEqual(gs.phase, "question")
         with self.assertRaises(GameError):
@@ -135,14 +157,23 @@ class TestFlow(unittest.TestCase):
         gs.end_question()
         self.assertEqual(gs.teams[1]["score"], -300)
 
-    def test_bonus_requires_round2(self):
+    def test_bonus_requires_bonus_file(self):
         gs = GameState()
-        gs.load_data(sample_data(with_bonus=False))
+        gs.load_board(board())                 # no bonus loaded
         gs.set_teams(["A", "B"])
         gs.start_game()
         gs.advance()
         with self.assertRaises(GameError):
             gs.activate_bonus()
+
+    def test_finale_requires_finale_file(self):
+        gs = GameState()
+        gs.load_board(board())
+        gs.set_teams(["A", "B"])
+        gs.start_game()
+        gs.advance()
+        with self.assertRaises(GameError):
+            gs.start_finale()
 
     def test_finale_flow(self):
         gs = ready_state()
@@ -196,6 +227,14 @@ class TestFlow(unittest.TestCase):
                 gs.select_tile(c, i)
                 gs.end_question()              # no ranking = 0 pts, tile used
         self.assertTrue(gs.board_complete())
+
+    def test_bonus_board_shape(self):
+        gs = ready_state()
+        gs.activate_bonus()
+        snap = gs.snapshot("display")
+        self.assertEqual(len(snap["board"]["categories"]), 2)
+        self.assertEqual(
+            len(snap["board"]["categories"][0]["clues"]), 2)
 
 
 if __name__ == "__main__":

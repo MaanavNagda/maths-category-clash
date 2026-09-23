@@ -103,17 +103,20 @@ function viewSetup(s) {
   stRow.appendChild(saveTeams);
   p.appendChild(stRow);
 
-  // questions
-  p.appendChild(el("h3", null, "Questions"));
-  const qRow = el("div", "row");
-  const loadBtn = el("button", null, "Load questions JSON…");
-  loadBtn.onclick = () => controller.openQuestions();
-  qRow.appendChild(loadBtn);
-  qRow.appendChild(el("span", "label",
-    s.questions_loaded
-      ? "✓ " + (s.questions_name || "questions loaded")
-      : "no file loaded"));
-  p.appendChild(qRow);
+  // question files — three separate uploads, each persisted
+  p.appendChild(el("h3", null, "Question files"));
+  [["board", "Regular board (4×4)", "openBoard", s.board_loaded],
+   ["bonus", "Bonus board (2×2)", "openBonus", s.bonus_loaded],
+   ["finale", s.labels.finale + " clue", "openFinale", s.finale_loaded]]
+    .forEach(([key, pretty, slot, loaded]) => {
+      const row = el("div", "row");
+      const btn = el("button", null, "Load " + pretty.toLowerCase() + "…");
+      btn.onclick = () => controller[slot]();
+      row.appendChild(btn);
+      row.appendChild(el("span", "label",
+        loaded ? "✓ " + (s[key + "_name"] || "loaded") : "not loaded"));
+      p.appendChild(row);
+    });
 
   // logo
   p.appendChild(el("h3", null, "Logo"));
@@ -147,7 +150,7 @@ function viewSetup(s) {
   // start
   const startRow = el("div", "btn-row");
   const start = el("button", "primary", "Start game →");
-  start.disabled = !(s.questions_loaded && s.teams.length >= 2);
+  start.disabled = !(s.board_loaded && s.teams.length >= 2);
   start.onclick = () => controller.startGame();
   startRow.appendChild(start);
   p.appendChild(startRow);
@@ -191,9 +194,12 @@ function viewBoard(s) {
     (s.round_name || "Board") + (s.board_complete ? " — complete" : "")));
 
   const grid = el("div", "mini-grid");
+  const nCats = s.board.categories.length;
+  const nRows = s.board.categories[0].clues.length;
+  grid.style.gridTemplateColumns = `repeat(${nCats}, 1fr)`;
   s.board.categories.forEach((cat) =>
     grid.appendChild(el("div", "mini-cat", cat.name)));
-  for (let row = 0; row < 4; row++) {
+  for (let row = 0; row < nRows; row++) {
     s.board.categories.forEach((cat, ci) => {
       const clue = cat.clues[row];
       const t = el("div", "mini-tile" + (clue.used ? " used" : ""), clue.value);
@@ -205,7 +211,7 @@ function viewBoard(s) {
   p.appendChild(scoresStrip(s));
 
   const row = el("div", "btn-row");
-  if (s.finale) {
+  if (s.finale_loaded) {
     const fin = el("button", "primary", s.labels.finale + " →");
     fin.onclick = () => confirmModal(
       "Start " + s.labels.finale + "?",
@@ -264,11 +270,13 @@ function viewWager(s) {
   row.appendChild(cap);
   p.appendChild(row);
 
+  const tileMax = Math.max(...s.board.categories.flatMap(
+    (c) => c.clues.map((cl) => cl.value)));
   function updateCap() {
     if (wagerTeam === null) return;
     const score = s.teams[wagerTeam].score;
-    cap.textContent = "max " + Math.max(score, 400);
-    inp.max = Math.max(score, 400);
+    cap.textContent = "max " + Math.max(score, tileMax);
+    inp.max = Math.max(score, tileMax);
   }
 
   const btns = el("div", "btn-row");

@@ -22,7 +22,9 @@ DEFAULT_LABELS = {
 DEFAULTS = {
     "labels": DEFAULT_LABELS,
     "logo": None,          # path inside userdata/, e.g. "userdata/logo.png"
-    "questions": None,     # absolute path to last loaded questions JSON
+    "board": None,         # absolute path to last loaded board .md
+    "bonus": None,         # absolute path to last loaded bonus .md
+    "finale": None,        # absolute path to last loaded finale .md
     "teams": ["Team 1", "Team 2", "Team 3", "Team 4", "Team 5"],
 }
 
@@ -39,8 +41,9 @@ def load():
         cfg["labels"].update({k: str(v) for k, v in saved["labels"].items()})
     if saved.get("logo"):
         cfg["logo"] = saved["logo"]
-    if saved.get("questions"):
-        cfg["questions"] = saved["questions"]
+    for key in ("board", "bonus", "finale"):
+        if saved.get(key):
+            cfg[key] = saved[key]
     if isinstance(saved.get("teams"), list) and saved["teams"]:
         cfg["teams"] = [str(t) for t in saved["teams"]]
     return cfg

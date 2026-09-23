@@ -5,4 +5,5 @@ config.json
 userdata/
 questions.local.json
 *.local.json
+*.local.md
 .DS_Store

@@ -4,8 +4,6 @@ No Qt imports here — this module is fully unit-testable. The Qt-facing
 controller (game/controller.py) wraps GameState and broadcasts snapshots.
 """
 
-TIMER_BY_VALUE = {100: 30, 200: 60, 300: 90, 400: 120}
-MAX_TILE_VALUE = 400
 MIN_TEAMS = 2
 MAX_TEAMS = 8
 DEFAULT_FINALE_SECONDS = 300
@@ -41,14 +39,9 @@ def rank_points(value, position):
     return round(value * rank_percent(position) / 100)
 
 
-def timer_seconds(value):
-    """Countdown length for a tile value; defaults to 60s for odd values."""
-    return TIMER_BY_VALUE.get(value, 60)
-
-
-def all_in_wager_cap(score):
+def all_in_wager_cap(score, tile_max):
     """Authentic Daily Double cap: current score, or max tile value if less."""
-    return max(score, MAX_TILE_VALUE)
+    return max(score, tile_max)
 
 
 def finale_wager_cap(score):
@@ -63,8 +56,10 @@ class GameState:
     def reset(self):
         self.phase = "setup"
         self.teams = []              # [{"name": str, "score": int}]
-        self.data = None             # validated questions dict
-        self.round_index = 0
+        self.board = None            # regular board dict (see questions.py)
+        self.bonus = None            # bonus board dict or None
+        self.finale = None           # finale dict or None
+        self.round_index = 0         # 0 = board, 1 = bonus
         self.used = set()            # {(round, cat, idx)}
         self.active = None           # current clue dict + location
         self.wager = None            # All In: {"team": int, "amount": int}
@@ -78,13 +73,38 @@ class GameState:
 
     # ------------------------------------------------------------------ setup
 
-    def load_data(self, data):
-        """Attach a validated questions dict (see game/questions.py)."""
-        if not isinstance(data, dict) or "rounds" not in data:
-            raise GameError("Invalid question data")
-        self.data = data
+    def _rounds(self):
+        """Loaded boards in play order: regular first, bonus second."""
+        return [r for r in (self.board, self.bonus) if r is not None]
+
+    def _round(self):
+        rounds = self._rounds()
+        if not rounds:
+            raise GameError("No board loaded")
+        if not (0 <= self.round_index < len(rounds)):
+            raise GameError("Bad round")
+        return rounds[self.round_index]
+
+    def load_board(self, board):
+        """Attach a validated regular board (see game/questions.py)."""
+        if not isinstance(board, dict) or "categories" not in board:
+            raise GameError("Invalid board data")
+        self.board = board
+        self.used = {u for u in self.used if u[0] != 0}
         self.round_index = 0
-        self.used = set()
+
+    def load_bonus(self, bonus):
+        """Attach a validated bonus board."""
+        if not isinstance(bonus, dict) or "categories" not in bonus:
+            raise GameError("Invalid board data")
+        self.bonus = bonus
+        self.used = {u for u in self.used if u[0] != 1}
+
+    def load_finale(self, finale):
+        """Attach a validated finale clue."""
+        if not isinstance(finale, dict) or "question" not in finale:
+            raise GameError("Invalid finale data")
+        self.finale = finale
 
     def set_teams(self, names):
         names = [n.strip() for n in names if n and n.strip()]
@@ -93,8 +113,8 @@ class GameState:
         self.teams = [{"name": n, "score": 0} for n in names]
 
     def start_game(self):
-        if self.data is None:
-            raise GameError("Load a questions file first")
+        if not self._rounds():
+            raise GameError("Load a board file first")
         if len(self.teams) < MIN_TEAMS:
             raise GameError("Set up teams first")
         self.phase = "rules"
@@ -111,12 +131,7 @@ class GameState:
     # ------------------------------------------------------------------ board
 
     def _clue(self, cat, idx):
-        if self.data is None:
-            raise GameError("No questions loaded")
-        rounds = self.data["rounds"]
-        if not (0 <= self.round_index < len(rounds)):
-            raise GameError("Bad round")
-        cats = rounds[self.round_index]["categories"]
+        cats = self._round()["categories"]
         if not (0 <= cat < len(cats)):
             raise GameError("Bad category")
         clues = cats[cat]["clues"]
@@ -129,13 +144,14 @@ class GameState:
             raise GameError("Not on the board")
         if (self.round_index, cat, idx) in self.used:
             raise GameError("Tile already used")
+        rnd = self._round()
         clue = self._clue(cat, idx)
         self.active = {
             "round": self.round_index, "cat": cat, "idx": idx,
             "value": clue["value"], "question": clue["question"],
             "answer": clue["answer"], "all_in": bool(clue.get("all_in")),
-            "category": self.data["rounds"][self.round_index]
-            ["categories"][cat]["name"],
+            "timer": rnd["timers"][idx],
+            "category": rnd["categories"][cat]["name"],
         }
         self.answer_revealed = False
         self.time_up = False
@@ -148,7 +164,10 @@ class GameState:
         if self.phase != "wager" or not self.active:
             raise GameError("No wager pending")
         self._check_team(team_id)
-        cap = all_in_wager_cap(self.teams[team_id]["score"])
+        rnd = self._round()
+        tile_max = max(cl["value"] for c in rnd["categories"]
+                       for cl in c["clues"])
+        cap = all_in_wager_cap(self.teams[team_id]["score"], tile_max)
         if not (1 <= amount <= cap):
             raise GameError(f"Wager must be 1–{cap}")
         self.wager = {"team": team_id, "amount": amount}
@@ -216,9 +235,9 @@ class GameState:
         self.time_up = False
 
     def board_complete(self):
-        if self.data is None:
+        if not self._rounds():
             return False
-        cats = self.data["rounds"][self.round_index]["categories"]
+        cats = self._round()["categories"]
         return all(
             (self.round_index, c, i) in self.used
             for c in range(len(cats)) for i in range(len(cats[c]["clues"]))
@@ -228,17 +247,17 @@ class GameState:
         """Ctrl+Shift+R: cycle to the next available round's board."""
         if self.phase != "board":
             raise GameError("Only available on the board")
-        if self.data is None or len(self.data["rounds"]) < 2:
-            raise GameError("No bonus round in this questions file")
-        self.round_index = (self.round_index + 1) % len(self.data["rounds"])
+        if len(self._rounds()) < 2:
+            raise GameError("No bonus board loaded")
+        self.round_index = (self.round_index + 1) % len(self._rounds())
 
     # ----------------------------------------------------------------- finale
 
     def start_finale(self):
         if self.phase != "board":
             raise GameError("Only available on the board")
-        if not self.data or "finale" not in self.data:
-            raise GameError("No finale in this questions file")
+        if not self.finale:
+            raise GameError("No finale loaded")
         self.finale_wagers = {}
         self.finale_results = {}
         self.time_up = False
@@ -306,40 +325,39 @@ class GameState:
             "teams": [{"id": i, "name": t["name"], "score": t["score"]}
                       for i, t in enumerate(self.teams)],
             "round_index": self.round_index,
-            "rounds_total": len(self.data["rounds"]) if self.data else 0,
-            "round_name": (self.data["rounds"][self.round_index].get("name")
-                           if self.data else ""),
-            "questions_loaded": self.data is not None,
+            "rounds_total": len(self._rounds()),
+            "board_loaded": self.board is not None,
+            "bonus_loaded": self.bonus is not None,
+            "finale_loaded": self.finale is not None,
             "board_complete": self.board_complete(),
             "time_up": self.time_up,
             "answer_revealed": self.answer_revealed,
         }
 
-        if self.data:
+        if self._rounds():
             s["board"] = {"categories": [
                 {"name": c["name"], "clues": [
                     {"value": cl["value"],
                      "used": (self.round_index, ci, ii) in self.used}
                     for ii, cl in enumerate(c["clues"])]}
-                for ci, c in enumerate(
-                    self.data["rounds"][self.round_index]["categories"])]}
-            if "finale" in self.data:
-                f = self.data["finale"]
-                fin = {"category": f["category"],
-                       "seconds": f.get("seconds", DEFAULT_FINALE_SECONDS)}
-                if self.phase in ("finale_question", "finale_results",
-                                  "standings") or host:
-                    fin["question"] = f["question"]
-                if self.phase in ("finale_results", "standings") or host:
-                    fin["answer"] = f["answer"]
-                s["finale"] = fin
+                for ci, c in enumerate(self._round()["categories"])]}
+        if self.finale:
+            f = self.finale
+            fin = {"category": f["category"],
+                   "seconds": f.get("seconds", DEFAULT_FINALE_SECONDS)}
+            if self.phase in ("finale_question", "finale_results",
+                              "standings") or host:
+                fin["question"] = f["question"]
+            if self.phase in ("finale_results", "standings") or host:
+                fin["answer"] = f["answer"]
+            s["finale"] = fin
 
         if self.active:
             a = {"category": self.active["category"],
                  "value": self.active["value"],
                  "all_in": self.active["all_in"],
                  "question": self.active["question"],
-                 "timer": timer_seconds(self.active["value"])}
+                 "timer": self.active["timer"]}
             if self.answer_revealed or host:
                 a["answer"] = self.active["answer"]
             if self.wager:

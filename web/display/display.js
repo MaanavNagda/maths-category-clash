@@ -11,13 +11,15 @@ const RULES = [
   "<b>Three attempts.</b> Wrong? Erase, re-work, and try again — up to 3 tries within the time limit.",
   "<b>No penalties.</b> Incorrect guesses cost nothing. Only correct answers score.",
   "<b>Plain answers.</b> Just write the final answer clearly — no 'what is…' needed.",
-  "<b>Time limits.</b> 100 pts = 30s · 200 = 60s · 300 = 90s · 400 = 120s. Time up = nobody scores.",
+  "<b>Time limits.</b> Rows: 30s · 45s · 60s · 2min (bonus board: 2min · 5min). Time up = nobody scores.",
   "<b>All In.</b> One hidden tile: the choosing team wagers points and answers alone.",
 ];
 
 function render(state) {
   S = state;
   if (state.timer_total) lastTimerTotal = state.timer_total;
+  else if (state.active) lastTimerTotal = state.active.timer;
+  else if (state.finale) lastTimerTotal = state.finale.seconds;
   app.innerHTML = "";
   const phase = state.phase;
   if (phase === "setup") return viewLogo(state);
@@ -77,10 +79,14 @@ function viewBoard(s) {
   scr.appendChild(head);
 
   const grid = el("div", "board-grid");
+  const nCats = s.board.categories.length;
+  const nRows = s.board.categories[0].clues.length;
+  grid.style.gridTemplateColumns = `repeat(${nCats}, 1fr)`;
+  grid.style.gridTemplateRows = `auto repeat(${nRows}, 1fr)`;
   s.board.categories.forEach((cat) => {
     grid.appendChild(el("div", "cat-cell", cat.name));
   });
-  for (let row = 0; row < 4; row++) {
+  for (let row = 0; row < nRows; row++) {
     s.board.categories.forEach((cat, ci) => {
       const clue = cat.clues[row];
       const t = el("div", "tile" + (clue.used ? " used" : ""));
