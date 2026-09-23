@@ -211,6 +211,15 @@ function viewBoard(s) {
   p.appendChild(scoresStrip(s));
 
   const row = el("div", "btn-row");
+  if (s.board_complete && s.bonus_loaded &&
+      s.round_index + 1 < s.rounds_total) {
+    const bon = el("button", "primary", s.labels.bonus + " →");
+    bon.onclick = () => confirmModal(
+      "Switch to " + s.labels.bonus + "?",
+      "This board closes and the bonus board begins.", "Switch",
+      () => controller.activateBonus());
+    row.appendChild(bon);
+  }
   if (s.finale_loaded) {
     const fin = el("button", "primary", s.labels.finale + " →");
     fin.onclick = () => confirmModal(
