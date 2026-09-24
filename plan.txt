@@ -94,3 +94,19 @@ GIT
 ---
 - git init + local commit. Pushed to github.com/MaanavNagda/maths-category-clash
   (public) after user approval.
+
+ONLINE VERSION (Firebase)
+-------------------------
+- online/ — static web app deployed to Firebase Hosting
+  (https://maths-category-clash.web.app). Same game, browser-based:
+  one URL, ?role=host&room=CODE&key=SECRET vs ?role=display&room=CODE.
+- Host tab is the authority: runs the JS port of GameState (online/game.js,
+  mirrors game/logic.py + game/questions.py) and pushes snapshots to
+  Realtime Database. Display tab subscribes read-only; its clicks go through
+  a requests queue the host drains.
+- RTDB: rooms/{code}/public/state (display-safe, no early answers) +
+  rooms/{code}/private/{key}/dump (full state for host reload recovery;
+  private parent unreadable so the key can't be enumerated).
+- Timer sync via ServerValue.TIMESTAMP + .info/serverTimeOffset.
+- online/firebase-config.js is gitignored (firebase-config.example.js ships).
+- Deploy: firebase deploy --only hosting,database (CLI logged in as user).

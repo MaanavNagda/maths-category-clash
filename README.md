@@ -60,6 +60,21 @@ All In: yes          <- optional; marks the tile as an All In wager
 - Keep real questions **out of the repo** — name files `*.local.md`
   (gitignored) and load those.
 
+## Online version (Firebase)
+
+A browser-based edition lives in `online/` and is deployed at
+**https://maths-category-clash.web.app** — no install needed.
+
+- Open the URL → **Create room** for the host tab. Setup shows a display
+  link — open it on the projector/second tab (or another machine).
+- The host tab runs the game and syncs via Firebase Realtime Database;
+  the display tab is read-only (tile/reveal clicks are forwarded).
+- Answers never reach the display early — they live under a secret path
+  that can't be enumerated (see `database.rules.json`).
+- Host reloads recover the full session (state dump in the private node).
+- Redeploy after edits: `firebase deploy --only hosting`
+  (`online/firebase-config.js` is gitignored — copy the example file).
+
 ## Tests
 
 ```bash

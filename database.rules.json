@@ -1,0 +1,20 @@
+{
+  "rules": {
+    "rooms": {
+      "$room": {
+        "public": {
+          ".read": true,
+          ".write": true
+        },
+        "private": {
+          ".read": false,
+          ".write": false,
+          "$hostKey": {
+            ".read": true,
+            ".write": true
+          }
+        }
+      }
+    }
+  }
+}

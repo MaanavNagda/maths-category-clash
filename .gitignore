@@ -6,4 +6,7 @@ userdata/
 questions.local.json
 *.local.json
 *.local.md
+online/firebase-config.js
+.firebase/
+firebase-debug.log
 .DS_Store

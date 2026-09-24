@@ -1,0 +1,108 @@
+/* Maths Category Clash — shared design tokens & components.
+   Minimalist dark theme: near-black, warm off-white, muted gold accent.
+   No gradients, no shadows, hairline borders, generous whitespace. */
+
+:root {
+  --bg: #0e0e10;
+  --surface: #161618;
+  --surface-2: #1d1d20;
+  --line: #2b2b30;
+  --line-soft: #222226;
+  --text: #f0ede4;
+  --muted: #8f8d84;
+  --faint: #5c5a54;
+  --accent: #c8a24a;
+  --accent-soft: #9a7d3a;
+  --danger: #c05b4d;
+  --ok: #6f9a72;
+  --serif: Georgia, "Times New Roman", serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --mono: "SF Mono", "Cascadia Mono", Consolas, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: var(--sans);
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line);
+  padding: 10px 22px;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+button:disabled { opacity: 0.35; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #141310; font-weight: 600; }
+button.primary:hover:not(:disabled) { background: #d8b45c; color: #141310; }
+button.danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+button.ghost { border-color: transparent; color: var(--muted); }
+button.ghost:hover:not(:disabled) { color: var(--text); border-color: var(--line); }
+
+input[type="text"], input[type="number"] {
+  font-family: var(--sans);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 9px 12px;
+  font-size: 14px;
+  outline: none;
+  width: 100%;
+}
+input:focus { border-color: var(--accent-soft); }
+
+select {
+  font-family: var(--sans);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 9px 12px;
+  font-size: 14px;
+  outline: none;
+}
+
+.label {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.rule-line { border: none; border-top: 1px solid var(--line-soft); }
+
+/* ---- shared modal ---- */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(8, 8, 9, 0.72);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 36px 40px;
+  max-width: 460px;
+  text-align: center;
+}
+.modal h3 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+.modal p { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 26px; }
+.modal .modal-actions { display: flex; gap: 12px; justify-content: center; }
+
+/* KaTeX sizing inside big display text */
+.tex { line-height: 1.5; }
