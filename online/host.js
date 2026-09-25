@@ -426,7 +426,8 @@ function viewFinaleWagers(s) {
     p.appendChild(row);
   });
   const btns = el("div", "btn-row");
-  const go = el("button", "primary", "Reveal question (5:00)");
+  const secs = s.finale.seconds || 300;
+  const go = el("button", "primary", "Reveal question (" + fmtTime(secs) + ")");
   go.onclick = () => confirmModal("Reveal the question?",
     "The " + s.labels.finale + " question and timer start on the display.",
     "Reveal", () => controller.startFinaleQuestion());

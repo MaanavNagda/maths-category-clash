@@ -16,7 +16,7 @@
 <script type="module">
   const p = new URLSearchParams(location.search);
   const role = p.get("role");
-  if (!p.get("room") || !role) {
+  if (!p.get("room") || !["host", "display"].includes(role)) {
     const { initLanding } = await import("./sync.js");
     initLanding();
   } else {
